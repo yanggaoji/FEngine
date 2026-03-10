@@ -31,6 +31,8 @@ export interface CanvasProps extends IProps {
   width?: number;
   height?: number;
   pixelRatio?: number;
+  layoutPixelRatio?: number;
+  renderPixelRatio?: number;
   padding?: number | string | (number | string)[];
   animate?: boolean;
   children?: any;
@@ -104,6 +106,7 @@ class Canvas<P extends CanvasProps = CanvasProps> {
   private theme: ThemeType;
   private gesture: Gesture;
   private canvas: GCanvas;
+  private measureCanvas: GCanvas;
   private _ee: EE;
   container: Group;
   context: IContext;
@@ -121,6 +124,8 @@ class Canvas<P extends CanvasProps = CanvasProps> {
       theme: customTheme,
       px2hd: customPx2hd,
       pixelRatio: customPixelRatio,
+      layoutPixelRatio: customLayoutPixelRatio,
+      renderPixelRatio: customRenderPixelRatio,
       landscape,
       container: rendererContainer,
       // style: customStyle,
@@ -138,7 +143,8 @@ class Canvas<P extends CanvasProps = CanvasProps> {
     // 初始化主题
     const theme = px2hd({ ...Theme, ...customTheme }) as ThemeType;
     const { pixelRatio, fontSize, fontFamily } = theme;
-    const devicePixelRatio = customPixelRatio ? customPixelRatio : pixelRatio;
+    const layoutPixelRatio = customLayoutPixelRatio || 1;
+    const renderPixelRatio = customRenderPixelRatio || customPixelRatio || pixelRatio || 1;
 
     // 组件更新器
     const updater = createUpdater(this);
@@ -147,7 +153,7 @@ class Canvas<P extends CanvasProps = CanvasProps> {
     const canvas = new GCanvas({
       container: rendererContainer,
       canvas: canvasElement,
-      devicePixelRatio,
+      devicePixelRatio: renderPixelRatio,
       renderer,
       width,
       height,
@@ -172,6 +178,29 @@ class Canvas<P extends CanvasProps = CanvasProps> {
     container.setAttribute('fontSize', fontSize);
     container.setAttribute('fontFamily', fontFamily);
 
+    const measureCanvasElement = createMobileCanvasElement(context);
+    const measureCanvas = new GCanvas({
+      container: rendererContainer,
+      canvas: measureCanvasElement,
+      devicePixelRatio: layoutPixelRatio,
+      renderer,
+      width,
+      height,
+      supportsTouchEvents: false,
+      supportsPointerEvents: false,
+      alwaysTriggerPointerEventOnCanvas: false,
+      createImage,
+      requestAnimationFrame,
+      cancelAnimationFrame,
+      useNativeClickEvent: false,
+      offscreenCanvas,
+      isTouchEvent,
+      isMouseEvent,
+    });
+    const measureContainer = measureCanvas.getRoot();
+    measureContainer.setAttribute('fontSize', fontSize);
+    measureContainer.setAttribute('fontFamily', fontFamily);
+
     const gesture = new Gesture(container);
 
     // 供全局使用的一些变量
@@ -182,7 +211,7 @@ class Canvas<P extends CanvasProps = CanvasProps> {
       px2hd,
       theme,
       gesture,
-      measureText: measureText(container, px2hd, theme),
+      measureText: measureText(measureContainer, px2hd, theme),
       timeline: null,
     };
 
@@ -209,6 +238,7 @@ class Canvas<P extends CanvasProps = CanvasProps> {
     this.gesture = gesture;
     this.theme = theme;
     this.canvas = canvas;
+    this.measureCanvas = measureCanvas;
     this.container = container;
     this.el = canvasElement;
     this.vNode = vNode;
@@ -273,10 +303,7 @@ class Canvas<P extends CanvasProps = CanvasProps> {
       canvas.addEventListener(
         'rerender',
         () => {
-          canvas
-            .getContextService()
-            .toDataURL({ type, encoderOptions })
-            .then(resolve);
+          canvas.getContextService().toDataURL({ type, encoderOptions }).then(resolve);
         },
         { once: true },
       );
@@ -319,7 +346,7 @@ class Canvas<P extends CanvasProps = CanvasProps> {
   }
 
   destroy() {
-    const { canvas, children, el } = this;
+    const { canvas, measureCanvas, children, el } = this;
     destroyElement(children);
     // 需要清理 canvas 画布内容，否则会导致 spa 应用 ios 下 canvas 白屏
     // https://stackoverflow.com/questions/52532614/total-canvas-memory-use-exceeds-the-maximum-limit-safari-12
@@ -332,6 +359,7 @@ class Canvas<P extends CanvasProps = CanvasProps> {
     this.updater = null;
     this.theme = null;
     this.canvas = null;
+    this.measureCanvas = null;
     this.container = null;
     this.el = null;
     this.vNode = null;
@@ -339,6 +367,9 @@ class Canvas<P extends CanvasProps = CanvasProps> {
     // 销毁也需要等 ready
     canvas.ready.then(() => {
       canvas.destroy();
+    });
+    measureCanvas.ready.then(() => {
+      measureCanvas.destroy();
     });
   }
 }

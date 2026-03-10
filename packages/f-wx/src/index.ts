@@ -12,7 +12,7 @@ function convertTouches(touches) {
 function dispatchEvent(el, event, type) {
   if (!el || !event) return;
   if (!event.preventDefault) {
-    event.preventDefault = function() {};
+    event.preventDefault = function () {};
   }
   event.type = type;
   event.target = el;
@@ -39,6 +39,14 @@ Component({
       type: null,
       value: () => {},
     },
+    renderPixelRatio: {
+      type: Number,
+      value: 0,
+    },
+    layoutPixelRatio: {
+      type: Number,
+      value: 1,
+    },
   },
 
   /**
@@ -59,14 +67,23 @@ Component({
         const { requestAnimationFrame, cancelAnimationFrame } = node;
 
         const context = node.getContext('2d');
-        const pixelRatio = wx.getSystemInfoSync().pixelRatio;
-        // 高清设置
-        node.width = width * pixelRatio;
-        node.height = height * pixelRatio;
+        const systemPixelRatio =
+          wx.getWindowInfo?.().pixelRatio || wx.getSystemInfoSync().pixelRatio || 1;
+
+        const renderPixelRatio =
+          this.data.renderPixelRatio > 0
+            ? this.data.renderPixelRatio
+            : Math.min(systemPixelRatio, 2);
+
+        const layoutPixelRatio = this.data.layoutPixelRatio > 0 ? this.data.layoutPixelRatio : 1;
+
+        node.width = width * renderPixelRatio;
+        node.height = height * renderPixelRatio;
         const { theme } = this.data;
         const children = this.data.onRender(this.data);
         const canvas = new Canvas({
-          pixelRatio,
+          renderPixelRatio,
+          layoutPixelRatio,
           width,
           height,
           theme,
@@ -92,7 +109,7 @@ Component({
 
   observers: {
     // 处理 update
-    '**': function() {
+    '**': function () {
       const { canvas, data } = this;
       if (!canvas) return;
       const { theme } = data;
